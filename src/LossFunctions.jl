@@ -6,7 +6,7 @@ module LossFunctions
 #	To add a new loss function, provide a new type definition and any constructors under the TYPE DEFINTIIONS heading, then add an appropriate loss method for scalar inputs.
 #	If you want to aggregate your loss series in some way, you should probably look at using the Distances package before thinking about this package
 #LICENSE
-#	MIT License (see github repository for more detail: https://github.com/colintbowers/DependentBootstrap.jl.git)
+#	MIT License (see github repository for more detail: https://github.com/colintbowers/LossFunctions.jl.git)
 #-----------------------------------------------------------
 
 #Load any entire modules that are needed (use import ModuleName1, ModuleName2, etc)
