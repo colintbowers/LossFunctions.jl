@@ -100,45 +100,23 @@ loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
 #Vector inputs (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction)
 	length(x) != length(y) && error("Input vectors must have matching length")
-	xyOut = Array(T, length(x))
-	for n = 1:length(x)
-		xyOut[n] = loss(x[n], y[n], lF)
-	end
-	return(xyOut)
+	return([ loss(x[n], y[n], lF) for n = 1:length(x) ])
 end
 #Matrix inputs (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Matrix{T}, y::Matrix{T}, lF::LossFunction)
 	size(x, 1) != size(y, 1) && error("Input matrices must have matching number of rows")
 	size(x, 2) != size(y, 2) && error("Input matrices must have matching number of columns")
-	xyOut = Array(T, size(x, 1), size(x, 2))
-	for m = 1:size(x, 2)
-		for n = 1:size(x, 1)
-			xyOut[n, m] = loss(x[n, m], y[n, m], lF)
-		end
-	end
-	return(xyOut)
+	return([ loss(x[n, m], y[n, m], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ])
 end
 #Vector and matrix input (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Vector{T}, y::Matrix{T}, lF::LossFunction)
 	length(x) != size(y, 1) && error("Input vector must have same number of rows as input matrix")
-	xyOut = Array(T, size(y, 1), size(y, 2))
-	for m = 1:size(y, 2)
-		for n = 1:size(y, 1)
-			xyOut[n, m] = loss(x[n], y[n, m], lF)
-		end
-	end
-	return(xyOut)
+	return([ loss(x[n], y[n, m], lF) for n = 1:size(y, 1), m = 1:size(y, 2) ])
 end
 #Reverse Vector and matrix input (note, separate function needed in case of asymmetric loss function input, e.g. L(x, y) != L(y, x))
 function loss{T<:Number}(x::Matrix{T}, y::Vector{T}, lF::LossFunction)
 	size(x, 1) != length(y) && error("Input vector must have same number of rows as input matrix")
-	xyOut = Array(T, size(x, 1), size(x, 2))
-	for m = 1:size(x, 2)
-		for n = 1:size(x, 1)
-			xyOut[n, m] = loss(x[n, m], y[n], lF)
-		end
-	end
-	return(xyOut)
+	return([ loss(x[n, m], y[n], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ])
 end
 
 
