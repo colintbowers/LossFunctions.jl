@@ -25,7 +25,8 @@ export 	LossFunction, #Abstract supertype
 		SquaredPropError, #Loss function type
 		AbsolutePropError, #Loss function type
 		QLIKE, #Loss function type
-		loss #Generic method for calculating loss between two things
+		loss, #Generic method for calculating loss between two things
+		lossdiff #Generic method for calculating a loss differential, ie L(x-BaseCase) - L(y-BaseCase)
 
 
 #******************************************************************************
@@ -34,7 +35,6 @@ export 	LossFunction, #Abstract supertype
 #SET CONSTANTS FOR MODULE
 #----------------------------------------------------------
 #Set constants here
-
 
 
 
@@ -96,7 +96,10 @@ loss(x::Number, y::Number, lF::AbsoluteLogError) = abs(log(x) - log(y))
 loss(x::Number, y::Number, lF::SquaredPropError) = (x/y - 1)^2
 loss(x::Number, y::Number, lF::AbsolutePropError) = abs(x/y - 1)
 loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
-#---- METHODS FOR ARRAYS -------------
+
+
+
+#------ General methods that work for all loss functions
 #Vector inputs (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction)
 	length(x) != length(y) && error("Input vectors must have matching length")
@@ -118,6 +121,17 @@ function loss{T<:Number}(x::Matrix{T}, y::Vector{T}, lF::LossFunction)
 	size(x, 1) != length(y) && error("Input vector must have same number of rows as input matrix")
 	return([ loss(x[n, m], y[n], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ])
 end
+lossdiff{T<:Number}(x1::T, x2::T, xBase::T, lF::LossFunction) = loss(x1, xBase, lF) - loss(x2, xBase, lF)
+function lossdiff{T<:Number}(x1::Vector{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction)
+	!(length(xBase) == length(x1) == length(x2)) && error("Input vectors must have matching length")
+	return([ lossdiff(x1[n], x2[n], xBase[n], lF) for n = 1:length(xBase) ])
+end
+function lossdiff{T<:Number}(x1::Matrix{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction)
+	!(length(xBase) == size(x1, 1) == length(x2)) && error("Input vectors must have matching length")
+	size(x1, 2) < 1 && error("Input matrix is empty")
+	return(loss(x1, xBase, lF) .- loss(x2, xBase, lF)) #Broad-casting should help with performance
+end
+lossdiff{T<:Number}(x1::Vector{T}, x2::Matrix{T}, xBase::Vector{T}, lF::LossFunction) = -1 * lossdiff(x2, x1, xBase, lF) #asymmetry not a problem here
 
 
 
