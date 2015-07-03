@@ -59,13 +59,11 @@ abstract LossFunction
 type SquaredError <: LossFunction; end
 type AbsoluteError <: LossFunction; end
 type MinkowskiError <: LossFunction
-	p::Real
-	function MinkowskiError(p::Real)
-		p <= 0 && error("Minkowski parameter must strictly positive")
-		new(p)
-	end
+	p::Float64
+	MinkowskiError(p::Float64) = (p <= 0) && error("Minkowski parameter must strictly positive") : new(p)
 end
-MinkowskiError() = MinkowskiError(2) #Default is SquaredError
+MinkowskiError() = MinkowskiError(2.0) #Default is SquaredError
+MinkowskiError(p::Number) = MinkowskiError(convert(Float64, p))
 type SquaredLogError <: LossFunction; end
 type AbsoluteLogError <: LossFunction; end
 type SquaredPropError <: LossFunction; end
@@ -87,6 +85,11 @@ function show(io::IO, lf::MinkowskiError)
 	println(io, "    p = " * string(lF.p))
 end
 show(lf::LossFunction) = show(STDOUT, lf)
+#---- deepcopy ----
+function deepcopy(x::LossFunction)
+	tempArgs = [ deepcopy(getfield(x, i)) for i = 1:length(names(x)) ]
+	return(eval(parse(string(typeof(x)) * "(tempArgs...)")))
+end
 #---- loss METHODS -------------
 loss(x::Number, y::Number, lF::SquaredError) = (x - y)^2
 loss(x::Number, y::Number, lF::AbsoluteError) = abs(x - y)
@@ -96,9 +99,6 @@ loss(x::Number, y::Number, lF::AbsoluteLogError) = abs(log(x) - log(y))
 loss(x::Number, y::Number, lF::SquaredPropError) = (x/y - 1)^2
 loss(x::Number, y::Number, lF::AbsolutePropError) = abs(x/y - 1)
 loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
-
-
-
 #------ General methods that work for all loss functions
 #Vector inputs (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction)
