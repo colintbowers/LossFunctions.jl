@@ -13,17 +13,18 @@ module LossFunctions
 
 #Load any specific variables/functions that are needed (use import ModuleName1.FunctionName1, ModuleName2.FunctionName2, etc)
 import 	Base.string,
-		Base.show
+		Base.show,
+		Base.deepcopy
 
 #Specify the variables/functions to export (use export FunctionName1, FunctionName2, etc)
 export 	LossFunction, #Abstract supertype
-		SquaredError, #Loss function type
-		AbsoluteError, #Loss function type
-		MinkowskiError, #Loss function type
-		SquaredLogError, #Loss function type
-		AbsoluteLogError, #Loss function type
-		SquaredPropError, #Loss function type
-		AbsolutePropError, #Loss function type
+		SquaredLoss, #Loss function type
+		AbsoluteLoss, #Loss function type
+		MinkowskiLoss, #Loss function type
+		SquaredLogLoss, #Loss function type
+		AbsoluteLogLoss, #Loss function type
+		SquaredPropLoss, #Loss function type
+		AbsolutePropLoss, #Loss function type
 		QLIKE, #Loss function type
 		loss, #Generic method for calculating loss between two things
 		lossdiff #Generic method for calculating a loss differential, ie L(x-BaseCase) - L(y-BaseCase)
@@ -56,31 +57,38 @@ export 	LossFunction, #Abstract supertype
 #SUPERTYPE
 abstract LossFunction
 #---- TYPE DEFINTIIONS ----
-type SquaredError <: LossFunction; end
-type AbsoluteError <: LossFunction; end
-type MinkowskiError <: LossFunction
+type SquaredLoss <: LossFunction; end
+type AbsoluteLoss <: LossFunction; end
+type MinkowskiLoss <: LossFunction
 	p::Float64
-	MinkowskiError(p::Float64) = (p <= 0) && error("Minkowski parameter must strictly positive") : new(p)
+	MinkowskiLoss(p::Float64) = (p <= 0) ? error("Minkowski parameter must strictly positive") : new(p)
 end
-MinkowskiError() = MinkowskiError(2.0) #Default is SquaredError
-MinkowskiError(p::Number) = MinkowskiError(convert(Float64, p))
-type SquaredLogError <: LossFunction; end
-type AbsoluteLogError <: LossFunction; end
-type SquaredPropError <: LossFunction; end
-type AbsolutePropError <: LossFunction; end
+MinkowskiLoss() = MinkowskiLoss(2.0) #Default is SquaredLoss
+MinkowskiLoss(p::Number) = MinkowskiLoss(convert(Float64, p))
+type SquaredLogLoss <: LossFunction; end
+type AbsoluteLogLoss <: LossFunction; end
+type SquaredPropLoss <: LossFunction; end
+type AbsolutePropLoss <: LossFunction; end
 type QLIKE <: LossFunction; end
+type HuberLoss <: LossFunction
+	p::Float64
+	HuberLoss(p::Float64) = (p <= 0) ? error("Huber loss parameter must be strictly positive") : new(p)
+end
+HuberLoss() = HuberLoss(1.0)
+HuberLoss(p::Number) = HuberLoss(convert(Float64, p))
 #---- string METHODS -------------
-string(lF::SquaredError) = "squaredError"
-string(lF::AbsoluteError) = "absoluteError"
-string(lF::MinkowskiError) = "minkowskiError"
-string(lF::SquaredLogError) = "squaredLogError"
-string(lF::AbsoluteLogError) = "absoluteLogError"
-string(lF::SquaredPropError) = "squaredProportionalError"
-string(lF::AbsolutePropError) = "absoluteProportionalError"
+string(lF::SquaredLoss) = "squaredLoss"
+string(lF::AbsoluteLoss) = "absoluteLoss"
+string(lF::MinkowskiLoss) = "minkowskiLoss"
+string(lF::SquaredLogLoss) = "squaredLogLoss"
+string(lF::AbsoluteLogLoss) = "absoluteLogLoss"
+string(lF::SquaredPropLoss) = "squaredProportionalLoss"
+string(lF::AbsolutePropLoss) = "absoluteProportionalLoss"
 string(lF::QLIKE) = "QLIKE"
+string(lF::HuberLoss) = "huberLoss"
 #---- show METHODS -------------
-show{T<:Union(SquaredError, AbsoluteError, SquaredLogError, AbsoluteLogError, SquaredPropError, AbsolutePropError, QLIKE)}(io::IO, lF::T) = println(io, "loss function = " * string(lF))
-function show(io::IO, lf::MinkowskiError)
+show{T<:Union(SquaredLoss, AbsoluteLoss, SquaredLogLoss, AbsoluteLogLoss, SquaredPropLoss, AbsolutePropLoss, QLIKE)}(io::IO, lF::T) = println(io, "loss function = " * string(lF))
+function show(io::IO, lf::MinkowskiLoss)
 	println(io, "loss function = " * string(lF))
 	println(io, "    p = " * string(lF.p))
 end
@@ -91,14 +99,22 @@ function deepcopy(x::LossFunction)
 	return(eval(parse(string(typeof(x)) * "(tempArgs...)")))
 end
 #---- loss METHODS -------------
-loss(x::Number, y::Number, lF::SquaredError) = (x - y)^2
-loss(x::Number, y::Number, lF::AbsoluteError) = abs(x - y)
-loss(x::Number, y::Number, lF::MinkowskiError) = abs(x - y)^lF.p
-loss(x::Number, y::Number, lF::SquaredLogError) = (log(x) - log(y))^2
-loss(x::Number, y::Number, lF::AbsoluteLogError) = abs(log(x) - log(y))
-loss(x::Number, y::Number, lF::SquaredPropError) = (x/y - 1)^2
-loss(x::Number, y::Number, lF::AbsolutePropError) = abs(x/y - 1)
+loss(x::Number, y::Number, lF::SquaredLoss) = (x - y)^2
+loss(x::Number, y::Number, lF::AbsoluteLoss) = abs(x - y)
+loss(x::Number, y::Number, lF::MinkowskiLoss) = abs(x - y)^lF.p
+loss(x::Number, y::Number, lF::SquaredLogLoss) = (log(x) - log(y))^2
+loss(x::Number, y::Number, lF::AbsoluteLogLoss) = abs(log(x) - log(y))
+loss(x::Number, y::Number, lF::SquaredPropLoss) = (x/y - 1)^2
+loss(x::Number, y::Number, lF::AbsolutePropLoss) = abs(x/y - 1)
 loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
+function loss(x::Number, y::Number, lF::HuberLoss)
+	e = x - y
+	if abs(e) <= lF.p
+		return(0.5 * e^2)
+	else
+		return(lF.p * (abs(e) - 0.5 * lF.p))
+	end
+end
 #------ General methods that work for all loss functions
 #Vector inputs (deliberately require same input type for x and y)
 function loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction)
@@ -129,7 +145,13 @@ end
 function lossdiff{T<:Number}(x1::Matrix{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction)
 	!(length(xBase) == size(x1, 1) == length(x2)) && error("Input vectors must have matching length")
 	size(x1, 2) < 1 && error("Input matrix is empty")
-	return(loss(x1, xBase, lF) .- loss(x2, xBase, lF)) #Broad-casting should help with performance
+	ld = Array(T, size(x1, 1), size(x1, 2))
+	for j = 1:size(x1, 2)
+		for n = 1:size(x1, 1)
+			ld[n, j] = lossdiff(x1[n, j], x2[n], xBase[n], lF)
+		end
+	end
+	return(ld)
 end
 lossdiff{T<:Number}(x1::Vector{T}, x2::Matrix{T}, xBase::Vector{T}, lF::LossFunction) = -1 * lossdiff(x2, x1, xBase, lF) #asymmetry not a problem here
 
