@@ -13,8 +13,7 @@ module LossFunctions
 
 #Load any specific variables/functions that are needed (use import ModuleName1.FunctionName1, ModuleName2.FunctionName2, etc)
 import 	Base.string,
-		Base.show,
-		Base.deepcopy
+		Base.show
 
 #Specify the variables/functions to export (use export FunctionName1, FunctionName2, etc)
 export 	LossFunction, #Abstract supertype
@@ -26,6 +25,7 @@ export 	LossFunction, #Abstract supertype
 		SquaredPropLoss, #Loss function type
 		AbsolutePropLoss, #Loss function type
 		QLIKE, #Loss function type
+		QLIKEReverse, #Loss function type
 		loss, #Generic method for calculating loss between two things
 		lossdiff #Generic method for calculating a loss differential, ie L(x-BaseCase) - L(y-BaseCase)
 
@@ -57,6 +57,7 @@ export 	LossFunction, #Abstract supertype
 #SUPERTYPE
 abstract LossFunction
 #---- TYPE DEFINTIIONS ----
+type DummyLoss <: LossFunction; end #dummy type that does nothing
 type SquaredLoss <: LossFunction; end
 type AbsoluteLoss <: LossFunction; end
 type MinkowskiLoss <: LossFunction
@@ -70,6 +71,7 @@ type AbsoluteLogLoss <: LossFunction; end
 type SquaredPropLoss <: LossFunction; end
 type AbsolutePropLoss <: LossFunction; end
 type QLIKE <: LossFunction; end
+type QLIKEReverse <: LossFunction; end #QLIKE is asymmetric, so it is useful to define a type which swaps the input order
 type HuberLoss <: LossFunction
 	p::Float64
 	HuberLoss(p::Float64) = (p <= 0) ? error("Huber loss parameter must be strictly positive") : new(p)
@@ -85,6 +87,7 @@ string(lF::AbsoluteLogLoss) = "absoluteLogLoss"
 string(lF::SquaredPropLoss) = "squaredProportionalLoss"
 string(lF::AbsolutePropLoss) = "absoluteProportionalLoss"
 string(lF::QLIKE) = "QLIKE"
+string(lF::QLIKEReverse) = "QLIKEReverse"
 string(lF::HuberLoss) = "huberLoss"
 #---- show METHODS -------------
 show{T<:Union(SquaredLoss, AbsoluteLoss, SquaredLogLoss, AbsoluteLogLoss, SquaredPropLoss, AbsolutePropLoss, QLIKE)}(io::IO, lF::T) = println(io, "loss function = " * string(lF))
@@ -93,10 +96,21 @@ function show(io::IO, lf::MinkowskiLoss)
 	println(io, "    p = " * string(lF.p))
 end
 show(lf::LossFunction) = show(STDOUT, lf)
-#---- deepcopy ----
-function deepcopy(x::LossFunction)
-	tempArgs = [ deepcopy(getfield(x, i)) for i = 1:length(names(x)) ]
-	return(eval(parse(string(typeof(x)) * "(tempArgs...)")))
+#----- tolossfunction METHOD -------
+#WARNING: This function is not type stable
+function tolossfunction(s::Symbol)
+	if s == :squaredLoss ; return(SquaredLoss())
+	elseif s == :absoluteLoss ; return(AbsoluteLoss())
+	elseif s == :minkowskiLoss ; return(MinkowskiLoss())
+	elseif s == :squaredLogLoss ; return(SquaredLogLoss())
+	elseif s == :absoluteLogLoss ; return(AbsoluteLogLoss())
+	elseif s == :squaredPropLoss ; return(SquaredPropLoss())
+	elseif s == :absolutePropLoss ; return(AbsolutePropLoss())
+	elseif s == :QLIKE ; return(QLIKE())
+	elseif s == :QLIKEReverse ; return(QLIKEReverse())
+	elseif s == :huberLoss ; return(HuberLoss())
+	else ; error("Invalid input symbol")
+	end
 end
 #---- loss METHODS -------------
 loss(x::Number, y::Number, lF::SquaredLoss) = (x - y)^2
@@ -107,6 +121,7 @@ loss(x::Number, y::Number, lF::AbsoluteLogLoss) = abs(log(x) - log(y))
 loss(x::Number, y::Number, lF::SquaredPropLoss) = (x/y - 1)^2
 loss(x::Number, y::Number, lF::AbsolutePropLoss) = abs(x/y - 1)
 loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
+loss(x::Number, y::Number, lF::QLIKEReverse) = y/x - log(y/x) - 1
 function loss(x::Number, y::Number, lF::HuberLoss)
 	e = x - y
 	if abs(e) <= lF.p
