@@ -17,16 +17,19 @@ import 	Base.string,
 
 #Specify the variables/functions to export (use export FunctionName1, FunctionName2, etc)
 export 	LossFunction, #Abstract supertype
-		SquaredLoss, #Loss function type
-		AbsoluteLoss, #Loss function type
-		MinkowskiLoss, #Loss function type
-		SquaredLogLoss, #Loss function type
-		AbsoluteLogLoss, #Loss function type
-		SquaredPropLoss, #Loss function type
-		AbsolutePropLoss, #Loss function type
-		QLIKE, #Loss function type
-		QLIKEReverse, #Loss function type
-		loss, #Generic method for calculating loss between two things
+		SymmetricLossFunction, #Abstract subtypes
+		AsymmetricLossFunction, #Abstract subtypes
+		SquaredLoss,
+		AbsoluteLoss,
+		MinkowskiLoss,
+		HuberLoss,
+		SquaredLogLoss,
+		AbsoluteLogLoss,
+		SquaredPropLoss,
+		AbsolutePropLoss,
+		QLIKE,
+		QLIKEReverse,
+		loss, #Generic method for calculating loss, ie L(x, y), or L(e) for the case e = x - y
 		lossdiff #Generic method for calculating a loss differential, ie L(x-BaseCase) - L(y-BaseCase)
 
 
@@ -35,50 +38,44 @@ export 	LossFunction, #Abstract supertype
 #----------------------------------------------------------
 #SET CONSTANTS FOR MODULE
 #----------------------------------------------------------
-#Set constants here
-
+const singleInputLossMethods = Union{SquaredLoss, AbsoluteLoss, MinkowskiLoss, HuberLoss}::Union
 
 
 
 #----------------------------------------------------------
 #LOSS FUNCTION TYPES
-#FIELDS
-#	Fields are unique to each type and hold the parameters necessary to implement that particular loss function
-#PURPOSE
-#	Each type stores the information needed to evaluate a loss function
-#CONSTRUCTORS
-#	Outer constructors are unique to the type and are generally used to provide popular default values.
-#METHODS
-#	loss(x, y, lF::LossFunction): Evaluate the loss between x and y using the specified loss function
-#	string
-#	show
-#NOTES
 #----------------------------------------------------------
-#SUPERTYPE
+#Abstract types
 abstract LossFunction
-#---- TYPE DEFINTIIONS ----
-type DummyLoss <: LossFunction; end #dummy type that does nothing
-type SquaredLoss <: LossFunction; end
-type AbsoluteLoss <: LossFunction; end
-type MinkowskiLoss <: LossFunction
+abstract SymmetricLossFunction <: LossFunction
+abstract AsymmetricLossFunction <: LossFunction
+#Loss function types
+type DummyLoss <: LossFunction ; end #dummy type that does nothing
+type SquaredLoss <: SymmetricLossFunction ; end
+type AbsoluteLoss <: SymmetricLossFunction ; end
+type MinkowskiLoss <: SymmetricLossFunction
 	p::Float64
-	MinkowskiLoss(p::Float64) = (p <= 0) ? error("Minkowski parameter must strictly positive") : new(p)
+	MinkowskiLoss(p::Float64) = (p <= 0) ? error("Minkowski parameter must be strictly positive") : new(p)
 end
 MinkowskiLoss() = MinkowskiLoss(2.0) #Default is SquaredLoss
 MinkowskiLoss(p::Number) = MinkowskiLoss(convert(Float64, p))
-type SquaredLogLoss <: LossFunction; end
-type AbsoluteLogLoss <: LossFunction; end
-type SquaredPropLoss <: LossFunction; end
-type AbsolutePropLoss <: LossFunction; end
-type QLIKE <: LossFunction; end
-type QLIKEReverse <: LossFunction; end #QLIKE is asymmetric, so it is useful to define a type which swaps the input order
-type HuberLoss <: LossFunction
+type SquaredLogLoss <: SymmetricLossFunction ; end
+type AbsoluteLogLoss <: SymmetricLossFunction ; end
+type SquaredPropLoss <: AsymmetricLossFunction ; end
+type AbsolutePropLoss <: AsymmetricLossFunction ; end
+type QLIKE <: AsymmetricLossFunction ; end
+type QLIKEReverse <: AsymmetricLossFunction ; end
+type HuberLoss <: SymmetricLossFunction
 	p::Float64
 	HuberLoss(p::Float64) = (p <= 0) ? error("Huber loss parameter must be strictly positive") : new(p)
 end
 HuberLoss() = HuberLoss(1.0)
 HuberLoss(p::Number) = HuberLoss(convert(Float64, p))
-#---- string METHODS -------------
+
+#----------------------------------------------------------
+#LOSS FUNCTION ADMIN METHODS
+#----------------------------------------------------------
+#string
 string(lF::SquaredLoss) = "squaredLoss"
 string(lF::AbsoluteLoss) = "absoluteLoss"
 string(lF::MinkowskiLoss) = "minkowskiLoss"
@@ -89,15 +86,14 @@ string(lF::AbsolutePropLoss) = "absoluteProportionalLoss"
 string(lF::QLIKE) = "QLIKE"
 string(lF::QLIKEReverse) = "QLIKEReverse"
 string(lF::HuberLoss) = "huberLoss"
-#---- show METHODS -------------
-show{T<:Union(SquaredLoss, AbsoluteLoss, SquaredLogLoss, AbsoluteLogLoss, SquaredPropLoss, AbsolutePropLoss, QLIKE)}(io::IO, lF::T) = println(io, "loss function = " * string(lF))
-function show(io::IO, lf::MinkowskiLoss)
-	println(io, "loss function = " * string(lF))
+#show
+function show{T<:Union{MinkowskiLoss, HuberLoss}}(io::IO, lf::T)
+	println(io, "Loss function = " * string(lF))
 	println(io, "    p = " * string(lF.p))
 end
+show(io::IO, lf::LossFunction) = println(io, "Loss function = " * string(lF))
 show(lf::LossFunction) = show(STDOUT, lf)
-#----- tolossfunction METHOD -------
-#WARNING: This function is not type stable
+#tolossfunction    WARNING: NOT TYPE STABLE
 function tolossfunction(s::Symbol)
 	if s == :squaredLoss ; return(SquaredLoss())
 	elseif s == :absoluteLoss ; return(AbsoluteLoss())
@@ -112,63 +108,40 @@ function tolossfunction(s::Symbol)
 	else ; error("Invalid input symbol")
 	end
 end
-#---- loss METHODS -------------
-loss(x::Number, y::Number, lF::SquaredLoss) = (x - y)^2
-loss(x::Number, y::Number, lF::AbsoluteLoss) = abs(x - y)
-loss(x::Number, y::Number, lF::MinkowskiLoss) = abs(x - y)^lF.p
-loss(x::Number, y::Number, lF::SquaredLogLoss) = (log(x) - log(y))^2
-loss(x::Number, y::Number, lF::AbsoluteLogLoss) = abs(log(x) - log(y))
-loss(x::Number, y::Number, lF::SquaredPropLoss) = (x/y - 1)^2
-loss(x::Number, y::Number, lF::AbsolutePropLoss) = abs(x/y - 1)
-loss(x::Number, y::Number, lF::QLIKE) = x/y - log(x/y) - 1
-loss(x::Number, y::Number, lF::QLIKEReverse) = y/x - log(y/x) - 1
-function loss(x::Number, y::Number, lF::HuberLoss)
-	e = x - y
-	if abs(e) <= lF.p
-		return(0.5 * e^2)
-	else
-		return(lF.p * (abs(e) - 0.5 * lF.p))
-	end
-end
-#------ General methods that work for all loss functions
-#Vector inputs (deliberately require same input type for x and y)
-function loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction)
-	length(x) != length(y) && error("Input vectors must have matching length")
-	return([ loss(x[n], y[n], lF) for n = 1:length(x) ])
-end
-#Matrix inputs (deliberately require same input type for x and y)
-function loss{T<:Number}(x::Matrix{T}, y::Matrix{T}, lF::LossFunction)
-	size(x, 1) != size(y, 1) && error("Input matrices must have matching number of rows")
-	size(x, 2) != size(y, 2) && error("Input matrices must have matching number of columns")
-	return([ loss(x[n, m], y[n, m], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ])
-end
-#Vector and matrix input (deliberately require same input type for x and y)
-function loss{T<:Number}(x::Vector{T}, y::Matrix{T}, lF::LossFunction)
-	length(x) != size(y, 1) && error("Input vector must have same number of rows as input matrix")
-	return([ loss(x[n], y[n, m], lF) for n = 1:size(y, 1), m = 1:size(y, 2) ])
-end
-#Reverse Vector and matrix input (note, separate function needed in case of asymmetric loss function input, e.g. L(x, y) != L(y, x))
-function loss{T<:Number}(x::Matrix{T}, y::Vector{T}, lF::LossFunction)
-	size(x, 1) != length(y) && error("Input vector must have same number of rows as input matrix")
-	return([ loss(x[n, m], y[n], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ])
-end
+tolossfunction(x::String) = tolossfunction(symbol(x))
+
+
+#----------------------------------------------------------
+# CORE METHODS FOR COMPUTING LOSS
+#----------------------------------------------------------
+#Methods that can be defined in terms of e = x - y, i.e. single input loss methods
+loss(e::Number, lF::SquaredLoss) = e^2
+loss(e::Number, lF::AbsoluteLoss) = abs(e)
+loss(e::Number, lF::MinkowskiLoss) = abs(e)^lF.p
+loss(e::Number, lF::HuberLoss) = abs(e) <= lF.p ? 0.5*e^2 : lF.p*(abs(e)-0.5*lF.p)
+#Methods that cannot be defined in terms of e = x - y
+loss{T<:singleInputLossMethods}(x::Number, y::Number, lF::T) = loss(x - y)
+loss(e::Number, lF::SquaredLogLoss) = (log(x) - log(y))^2
+loss(e::Number, lF::AbsoluteLogLoss) = abs(log(x) - log(y))
+loss(e::Number, lF::SquaredPropLoss) = (x/y - 1)^2
+loss(e::Number, lF::AbsolutePropLoss) = abs(x/y - 1)
+loss(e::Number, lF::QLIKE) = x/y - log(x/y) - 1
+loss(e::Number, lF::QLIKEReverse) = y/x - log(y/x) - 1
+#Method for a loss differential (used a lot in forecast evaluation), i.e. L(x, basecase) - L(y, basecase)
 lossdiff{T<:Number}(x1::T, x2::T, xBase::T, lF::LossFunction) = loss(x1, xBase, lF) - loss(x2, xBase, lF)
-function lossdiff{T<:Number}(x1::Vector{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction)
-	!(length(xBase) == length(x1) == length(x2)) && error("Input vectors must have matching length")
-	return([ lossdiff(x1[n], x2[n], xBase[n], lF) for n = 1:length(xBase) ])
-end
-function lossdiff{T<:Number}(x1::Matrix{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction)
-	!(length(xBase) == size(x1, 1) == length(x2)) && error("Input vectors must have matching length")
-	size(x1, 2) < 1 && error("Input matrix is empty")
-	ld = Array(T, size(x1, 1), size(x1, 2))
-	for j = 1:size(x1, 2)
-		for n = 1:size(x1, 1)
-			ld[n, j] = lossdiff(x1[n, j], x2[n], xBase[n], lF)
-		end
-	end
-	return(ld)
-end
-lossdiff{T<:Number}(x1::Vector{T}, x2::Matrix{T}, xBase::Vector{T}, lF::LossFunction) = -1 * lossdiff(x2, x1, xBase, lF) #asymmetry not a problem here
+
+
+#----------------------------------------------------------
+# ARRAY BASED EXTENSIONS TO CORE METHODS
+#----------------------------------------------------------
+loss{T1<:Number, T2<:singleInputLossMethods}(e::Vector{T}, lF::LossFunction) = T[ loss(e[n], lF) for n = 1:length(e) ]
+loss{T<:Number}(x::Vector{T}, y::Vector{T}, lF::LossFunction) = length(x) == length(y) ? T[ loss(x[n], y[n], lF) for n = 1:length(x) ] : error("Length mismatch")
+loss{T<:Number}(x::Matrix{T}, y::Matrix{T}, lF::LossFunction) = size(x) == size(y) ? T[ loss(x[n, m], y[n, m], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ] : error("size mismatch")
+loss{T<:Number}(x::Vector{T}, y::Matrix{T}, lF::LossFunction) = length(x) == size(y, 1) ? T[ loss(x[n], y[n, m], lF) for n = 1:size(y, 1), m = 1:size(y, 2) ] : error("size mismatch")
+loss{T<:Number}(x::Matrix{T}, y::Vector{T}, lF::LossFunction) = size(x, 1) == length(y) ? T[ loss(x[n, m], y[n], lF) for n = 1:size(x, 1), m = 1:size(x, 2) ] : error("Size mismatch")
+lossdiff{T<:Number}(x1::Vector{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction) = (length(xBase) == length(x1) == length(x2) ? T[ lossdiff(x1[n], x2[n], xBase[n], lF) for n = 1:length(xBase) ] : error("Length mismatch")
+lossdiff{T<:Number}(x1::Matrix{T}, x2::Vector{T}, xBase::Vector{T}, lF::LossFunction) = (length(xBase) == size(x1, 1) == length(x2)) ? T[ lossdiff(x1[n, m], x2[n], xBase[n], lF) for n = 1:size(x1, 1), m = 1:size(x1, 2) ]
+lossdiff{T<:Number}(x1::Vector{T}, x2::Matrix{T}, xBase::Vector{T}, lF::LossFunction) = -1 * lossdiff(x2, x1, xBase, lF)
 
 
 
